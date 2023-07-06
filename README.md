@@ -1,10 +1,11 @@
-# Replit Code Instruct inference using CPU
+# Replit Code Instruct inference using CPU with UI
 
 Run inference on the [replit code instruct model](https://huggingface.co/abacaj/Replit-v2-CodeInstruct-3B-ggml) using your CPU. This inference code uses a [ggml](https://github.com/ggerganov/ggml) quantized model. To run the model we'll use a library called [ctransformers](https://github.com/marella/ctransformers) that has bindings to ggml in python.
 
 Demo:
 
-[Inference Demo](https://github.com/abacaj/replit-3B-inference/assets/7272343/a68ec17a-830b-4d76-9df2-166ca6b7fb2b)
+
+[Inference Demo](https://github.com/airobinnet/replit-3B-inference/assets/126980386/c3c24080-e237-47e7-b228-0cc309a560e4)
 
 ## Requirements
 
@@ -37,10 +38,13 @@ Next download the quantized model weights (about 1.5GB).
 python download_model.py
 ```
 
-Ready to rock, run inference.
+Run the python script.
 
 ```sh
-python inference.py
+python inference_with_ui.py
 ```
 
-Next modify inference script prompt and generation parameters.
+Visit the url
+
+[http://localhost:5000/](http://localhost:5000/)
+
