@@ -1,0 +1,210 @@
+<head>
+    <title>Replit-v2-CodeInstruct-3B</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/styles/default.min.css">
+    <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/10.7.2/highlight.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/marked/2.1.3/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://unpkg.com/json5@2/dist/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.0/jquery.min.js" integrity="sha512-3gJwYpMe3QewGELv8k/BX9vcqhryRdzRMxVfq6ngyWXwo03GFEzjsUm8Q7RZcHPHksttq7/GFoxjCVUjkjvPdw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/js/lightbox.js" integrity="sha512-MBa5biLyZuJEdQR7TkouL0i1HAqpq8lh8suPgA//wpxGx4fU1SGz1hGSlZhYmm+b7HkoncCWpfVKN3NDcowZgQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/lightbox2/2.11.4/css/lightbox.min.css" integrity="sha512-ZKX+BvQihRJPA8CROKBhDNvoc2aDMOdAlcm7TUQY+35XYtrd3yh95QOOhsPDQY9QnKE0Wqag9y38OIgEvb88cA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+
+</head>
+    <script>
+        var chatHistory = [];
+        var tempReceived = '';
+        var tempFormatted = '';
+        var settings = {};
+
+        // create a new marked renderer to add lightbox to images
+        var renderer = new marked.Renderer();
+        renderer.image = function(href, title, text) {
+            // display images with 250px width and lightbox js
+            return `<a href="${href}" data-lightbox="${text}" data-title="${title}"><img src="${href}" width="250px" alt="${text}"></a>`;
+        };
+        renderer.link = function(href, title, text) {
+        return `<a target="_blank" href="${href}" title="${title}">${text}</a>`;
+        };
+        // set the options for marked and a highlighter and copy button
+        marked.setOptions({
+            highlight: function(code) {
+                return '<div class="language">' + ('code') + '</div>' + 
+                    '<button class="copy-btn" onclick="copyToClipboard(this)">Copy</button>' +
+                    '<pre><code>' + hljs.highlightAuto(code).value + '</code></pre>';
+            },
+            renderer: renderer,
+        });
+
+        // parse a json with json5
+        function parseComplexJson(jsonStr) {
+            return JSON5.parse(jsonStr);
+        }
+
+        // copy the code to the clipboard
+        function copyToClipboard(btn) {
+            var code = btn.nextElementSibling.innerText;
+            var textarea = document.createElement('textarea');
+            textarea.textContent = code;
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+            var overlay = document.getElementById('overlay');
+            overlay.textContent = 'Code copied to clipboard';
+            overlay.classList.add('active');
+            setTimeout(function() {
+                overlay.classList.remove('active');
+            }, 1000);
+                }
+
+        // connect to socket and use websocket transport to ensure a swift connection
+        var socket = io.connect('http://' + document.domain + ':' + location.port, {transports: ['websocket']});
+        socket.on('connect', function() {
+            console.log('User has connected!');
+        });
+
+        // disconnect
+        socket.on('disconnect', function() {
+            console.log('User has disconnected!');
+        });
+
+        
+        socket.on('message', function(msg) {
+            var timestamp = new Date().toLocaleTimeString();
+            
+            // be sure the msg is converted to json
+            if (typeof msg === 'string') {
+                try {
+                    msg = JSON.parse(msg);
+                } catch (e) {
+                    console.error('Error parsing JSON: ', e);
+                }
+            }
+
+            // replace the occassional \n within the responses
+            let content = msg.content;
+            if (msg.content) {
+                content = msg.content.replace(/\n/g,'').trim();
+            }
+            // end of the message when receiving normal messages
+            if (content == undefined) {
+                // clear the tempReceived and tempFormatted
+                tempReceived = '';
+                tempFormatted = '';
+                var lastMessage = document.querySelector('.last-message');
+                if (lastMessage) {
+                    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                }
+                content = '';
+                return;
+            }
+            else {
+                // get the last message div and append the text only
+                var lastMessage = document.querySelector('.last-message');
+                if (lastMessage) {
+                    if(lastMessage.querySelector('.spinner') != null) {
+                        lastMessage.querySelector('.spinner').remove();
+                    }
+                    tempReceived += msg.content;
+                    tempFormatted = tempReceived;
+                    
+                    // count the amount of ``` if there is none, use marked, if there is 1 do not use marked, if there are 2, use marked
+                    var count = (tempReceived.match(/```/g) || []).length;
+                    if (count > 0) {
+                        if (count % 2 == 0) {
+                            tempFormatted = marked(tempReceived);
+                        }
+                        else {
+                            // add ``` to the end of the message
+                            tempFormatted = tempReceived + '\n```';
+                            // format it
+                            tempFormatted = marked(tempFormatted);
+                        }
+                    }
+                    else {
+                        tempFormatted = marked(tempReceived);
+                    }
+                    lastMessage.querySelector('.bubble').innerHTML = tempFormatted;
+                    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+                }
+            }
+        });
+
+        function escapeHTML(str) {
+            var div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
+    </script>
+</head>
+<body>
+    <h1>teknium/Replit-v2-CodeInstruct-3B</h1>
+    <div id="overlay">
+        <div class="text">Code copied to clipboard</div>
+    </div>
+        <div id="chat-container" class="chat-container">
+            <div id="messages"></div>
+            <divclass="message-container">
+                <div class="preset-text-container">
+                    <button class="preset-text-button" onclick="insertPresetText('a python script that calculates the nth fibonacci number')">Python fibonacci</button>
+                    <button class="preset-text-button" onclick="insertPresetText('a html/javascript page with an animated changing gradient background')">JS bg gradient</button>
+                    <button class="preset-text-button" onclick="insertPresetText('a landing page in html, css and js for a tech company including colors and animations')">Tech Landing Page</button>
+                    <button class="preset-text-button" onclick="insertPresetText('a working calculator written in html/javascript')">JS calculator</button>
+                </div>                
+                <div class="input-field">
+                    <textarea id="message" placeholder="Type a message..."></textarea>
+                    
+                    <button id="send" class="send-button">Send</button>
+                </div>
+            </div>
+        </div>
+    </body>
+    <script>
+    let lastUpload = '';
+    function insertPresetText(text) {
+        var messageInput = document.getElementById('message');
+        messageInput.value += text;
+        document.getElementById('send').click();
+    }
+    
+    document.getElementById('send').addEventListener('click', function() {
+        var attached_file = lastUpload;
+        var message = document.getElementById('message').value;
+        socket.send(JSON.stringify({'message': message}));
+        var escaped_message = escapeHTML(message); 
+        var messageFormatted = escaped_message.replace(/\n/g, "<br>"); 
+        var timestamp = new Date().toLocaleTimeString();
+
+        var lastMessage = document.querySelector('.last-message');
+        if (lastMessage) {
+            lastMessage.classList.remove('last-message');
+        }
+
+        var chatMessage = '<div class="message user last-message"><span class="timestamp">' + timestamp + '</span><div class="bubble">' + messageFormatted + '</div></div>'; 
+        document.getElementById('messages').innerHTML += chatMessage;
+        var lastMessage2 = document.querySelector('.last-message');
+                    if (lastMessage2) {
+                        lastMessage2.classList.remove('last-message');
+                    }
+
+        // create a bot message div with a loading spinner
+        var botMessage = '<div class="message bot last-message"><span class="timestamp">' + timestamp + '</span><div class="bubble"><div class="spinner"></div></div></div>';
+        var element = document.createElement('div');
+        element.innerHTML = botMessage;
+        document.getElementById('messages').innerHTML += botMessage;
+        document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        // remove input text
+        document.getElementById('message').value = '';
+        
+    });
+    document.getElementById('message').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById('send').click();
+        }
+    });
+    </script>
+</body>
+</html>
